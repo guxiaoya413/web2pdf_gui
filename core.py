@@ -160,6 +160,13 @@ def pick_output_path(preferred_path):
         return str(preferred.with_name(f"{preferred.stem}_{timestamp}{preferred.suffix}"))
 
 
+def pick_output_path_with_log(preferred_path, *, file_label, log=None):
+    output_path = pick_output_path(preferred_path)
+    if output_path != preferred_path and log:
+        log(f"目标 {file_label} 正在被占用，改为生成：{output_path}")
+    return output_path
+
+
 def merge_pdf_files(pdf_paths, output_path):
     try:
         from pypdf import PdfWriter
@@ -180,9 +187,7 @@ def merge_pdf_files(pdf_paths, output_path):
 
 
 def merge_with_fallback_name(pdf_paths, preferred_path, log=None):
-    output_path = pick_output_path(preferred_path)
-    if output_path != preferred_path and log:
-        log(f"目标 PDF 正在被占用，改为生成：{output_path}")
+    output_path = pick_output_path_with_log(preferred_path, file_label="PDF", log=log)
 
     try:
         merge_pdf_files(pdf_paths, output_path)
@@ -197,6 +202,37 @@ def merge_with_fallback_name(pdf_paths, preferred_path, log=None):
             log(f"目标 PDF 写入失败，改为生成：{output_path}")
         merge_pdf_files(pdf_paths, output_path)
         return output_path
+
+
+def convert_pdf_to_docx(input_pdf, output_docx, *, log=None):
+    input_path = Path(input_pdf)
+    if not input_path.exists():
+        raise FileNotFoundError(f"PDF 文件不存在：{input_path}")
+    if input_path.suffix.lower() != ".pdf":
+        raise ValueError("请选择 .pdf 文件。")
+
+    output_path = Path(output_docx)
+    if output_path.suffix.lower() != ".docx":
+        output_path = output_path.with_suffix(".docx")
+
+    try:
+        from pdf2docx import Converter
+    except ImportError:
+        raise RuntimeError("缺少 PDF 转 DOCX 依赖，请先运行：pip install -r requirements.txt") from None
+
+    final_output = pick_output_path_with_log(str(output_path), file_label="DOCX", log=log)
+    if log:
+        log(f"开始转换 PDF：{input_path}")
+
+    converter = Converter(str(input_path))
+    try:
+        converter.convert(final_output, start=0, end=None)
+    finally:
+        converter.close()
+
+    if log:
+        log(f"DOCX 已生成：{final_output}")
+    return final_output
 
 
 def export_urls_to_pdf(
